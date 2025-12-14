@@ -1,6 +1,7 @@
 #include "linearfb.h"
 #include <string.h>
 
+static int fb_initialized = 0;
 static struct limine_framebuffer *fb = NULL;
 static linearfb_mode_t fb_mode = FB_MODE_CONSOLE;
 static linearfb_font_t fb_font = {0};
@@ -13,9 +14,13 @@ static uint32_t console_cols = 0, console_rows = 0;
 
 static uint32_t console_bg = 0x00000000;
 
+int linearfb_probe(void) {
+    return fb_initialized;
+}
+
 void linearfb_console_set_cursor(uint32_t col, uint32_t row) {
-    if (col < console_cols) console_col = col;
-    if (row < console_rows) console_row = row;
+    if (col < console_cols) __atomic_store_n(&console_col, col, __ATOMIC_SEQ_CST);
+    if (row < console_rows) __atomic_store_n(&console_row, row, __ATOMIC_SEQ_CST);
 }
 
 void linearfb_console_get_cursor(uint32_t *col, uint32_t *row) {
@@ -62,10 +67,10 @@ void linearfb_console_putc(char c) {
         console_col = 0;
         if (++console_row >= console_rows) console_scroll();
         return;
-    } else if (c == '\r') {
+    } if (c == '\r') {
         console_col = 0;
         return;
-    } else if (c == '\b') {
+    } if (c == '\b') {
         if (console_col > 0) --console_col;
         return;
     }
@@ -110,11 +115,12 @@ int linearfb_init(struct limine_framebuffer_request *fb_req) {
         console_cols = fb->width / font_glyph_w;
         console_rows = fb->height / font_glyph_h;
     }
+    fb_initialized = 1;
     return 0;
 }
 
-void linearfb_set_mode(linearfb_mode_t mode) {
-    fb_mode = mode;
+void linearfb_set_mode(const linearfb_mode_t mode) {
+    __atomic_store_n(&fb_mode, mode, __ATOMIC_SEQ_CST);
 }
 
 int linearfb_load_font(const linearfb_font_t* font, const uint32_t count) {
